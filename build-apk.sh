@@ -5,7 +5,6 @@
 #   adhan_fajr.mp3 (optional, a different Fajr adhan; then set NAT_FAJR_FILE=true in index.html)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; APP="$HERE/dawa-app"
-[ -f "$HERE/adhan.mp3" ] || { echo "Put adhan.mp3 next to this script first"; exit 1; }
 rm -rf "$APP"; mkdir -p "$APP/www" && cd "$APP"
 npm init -y >/dev/null
 npm i @capacitor/core @capacitor/cli @capacitor/android @capacitor/local-notifications
@@ -13,7 +12,7 @@ cp "$HERE/index.html" www/index.html
 npx cap init "منصة دعوة" com.dawa.app --web-dir www
 npx cap add android
 RAW=android/app/src/main/res/raw; mkdir -p "$RAW"
-cp "$HERE/adhan.mp3" "$RAW/adhan.mp3"; [ -f "$HERE/adhan_fajr.mp3" ] && cp "$HERE/adhan_fajr.mp3" "$RAW/adhan_fajr.mp3" || true
+[ -f "$HERE/adhan.mp3" ] && cp "$HERE/adhan.mp3" "$RAW/adhan.mp3" || true; [ -f "$HERE/adhan_fajr.mp3" ] && cp "$HERE/adhan_fajr.mp3" "$RAW/adhan_fajr.mp3" || true
 # permissions needed for exact alarms, boot restore and notifications
 M=android/app/src/main/AndroidManifest.xml
 python3 - "$M" <<'PY'

@@ -20,7 +20,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONArray;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -54,6 +56,7 @@ public class DawaAdhanPlugin extends Plugin {
         final String url = call.getString("url");
         final String id = call.getString("id");
         final String dirName = call.getString("dir", "adhan");
+        final String metaStr = call.getString("meta", "");
         Integer mm = call.getInt("maxMb", 25);
         final long maxBytes = (mm == null ? 25 : mm) * 1024L * 1024L;
         if (url == null || id == null || !url.startsWith("https://")) {
@@ -106,6 +109,12 @@ public class DawaAdhanPlugin extends Plugin {
                 File dst = new File(dir, name);
                 if (dst.exists()) dst.delete();
                 if (!part.renameTo(dst)) throw new Exception("rename failed");
+                // ملف جانبي (.meta) فيه رابط التلاوة واسم القارئ: بيخلّي التطبيق يسترجع قائمة التحميلات من الملفات نفسها لو اتمسحت قاعدة البيانات
+                if (metaStr != null && !metaStr.isEmpty()) {
+                    try (FileOutputStream mo = new FileOutputStream(new File(dir, name + ".meta"))) {
+                        mo.write(metaStr.getBytes("UTF-8"));
+                    } catch (Exception ignore) { }
+                }
                 JSObject r = new JSObject();
                 r.put("name", name);
                 r.put("size", total);
@@ -122,9 +131,46 @@ public class DawaAdhanPlugin extends Plugin {
     public void remove(PluginCall call) {
         String name = call.getString("name", "");
         if (!name.isEmpty() && name.indexOf('/') < 0 && name.indexOf("..") < 0) {
-            new File(dirFor(getContext(), call.getString("dir", "adhan")), name).delete();
+            File dd = dirFor(getContext(), call.getString("dir", "adhan"));
+            new File(dd, name).delete();
+            new File(dd, name + ".meta").delete();
         }
         call.resolve();
+    }
+
+    /** list({dir}) -> {files:[{name,size,path,meta}]} — الملفات المحمّلة فعليًا على الجهاز */
+    @PluginMethod
+    public void list(PluginCall call) {
+        try {
+            File dir = dirFor(getContext(), call.getString("dir", "dl"));
+            JSArray arr = new JSArray();
+            File[] fs = dir.listFiles();
+            if (fs != null) {
+                for (File f : fs) {
+                    String n = f.getName();
+                    if (!n.endsWith(".mp3") || f.length() < 5000) continue;
+                    JSObject o = new JSObject();
+                    o.put("name", n);
+                    o.put("size", f.length());
+                    o.put("path", f.getAbsolutePath());
+                    File m = new File(dir, n + ".meta");
+                    if (m.exists() && m.length() < 8192) {
+                        try (FileInputStream in = new FileInputStream(m); ByteArrayOutputStream bo = new ByteArrayOutputStream()) {
+                            byte[] buf = new byte[1024];
+                            int k;
+                            while ((k = in.read(buf)) > 0) bo.write(buf, 0, k);
+                            o.put("meta", bo.toString("UTF-8"));
+                        } catch (Exception ignore) { }
+                    }
+                    arr.put(o);
+                }
+            }
+            JSObject r = new JSObject();
+            r.put("files", arr);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()));
+        }
     }
 
     /** schedule({items:[{id,at,title,body}], file, volume}) */
